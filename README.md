@@ -142,6 +142,15 @@ Frontend는 FastAPI 기반 REST API와 통신합니다.
 - 관련 게시글 조회
 - AI 챗봇
 
+### 카카오모빌리티 자동차 경로
+
+코스 지도는 브라우저에서 카카오모빌리티 다중 경유지 길찾기 API를 직접 호출합니다.
+
+```env
+VITE_KAKAO_MAP_JAVASCRIPT_KEY=카카오_JavaScript_키
+VITE_KAKAO_REST_API_KEY=카카오_REST_API_키
+```
+
 ---
 
 ## 👥 Team
