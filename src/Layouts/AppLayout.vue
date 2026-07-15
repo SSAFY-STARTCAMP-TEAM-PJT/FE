@@ -3,6 +3,8 @@ import { computed } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 
 import AppHeader from '@/components/common/AppHeader.vue'
+import AppLoading from '@/components/common/AppLoading.vue'
+import ChatWidget from '@/components/chat/ChatWidget.vue'
 
 const route = useRoute()
 
@@ -20,7 +22,9 @@ const isFullWidthPage = computed(() => {
     </main>
 
     <!-- 추후 전역 AI 위젯 추가 -->
-    <!-- <ChatWidget /> -->
+
+    <ChatWidget />
+    <AppLoading />
   </div>
 </template>
 

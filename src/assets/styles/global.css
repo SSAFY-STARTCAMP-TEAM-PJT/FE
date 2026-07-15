@@ -133,3 +133,34 @@ textarea::placeholder {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* 데스크톱: 본문 + 보조 패널 */
+.responsive-panel-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  align-items: start;
+  gap: var(--spacing-6);
+}
+
+.mobile-only {
+  display: none !important;
+}
+
+.desktop-only {
+  display: initial;
+}
+
+@media (max-width: 767px) {
+  .responsive-panel-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--spacing-4);
+  }
+
+  .mobile-only {
+    display: initial !important;
+  }
+
+  .desktop-only {
+    display: none !important;
+  }
+}
