@@ -35,6 +35,7 @@ const router = createRouter({
       path: '/map',
       name: 'map',
       component: () => import('@/views/MapView.vue'),
+      // meta: { fullWidth: true },
     },
     {
       path: '/:pathMatch(.*)*',
