@@ -1,17 +1,46 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-import HomeView from '@/views/HomeView.vue'
-import PostListView from '@/views/PostListView.vue'
-import MapView from '@/views/MapView.vue'
-import NotFoundView from '@/views/NotFoundView.vue'
-
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
+
   routes: [
-    { path: '/', name: 'home', component: HomeView },
-    { path: '/posts', name: 'posts', component: PostListView },
-    { path: '/map', name: 'map', component: MapView },
-    { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView },
+    {
+      path: '/',
+      name: 'home',
+      component: () => import('@/views/HomeView.vue'),
+    },
+    {
+      path: '/posts',
+      name: 'post-list',
+      component: () => import('@/views/PostListView.vue'),
+    },
+    {
+      path: '/posts/new',
+      name: 'post-create',
+      component: () => import('@/views/PostCreateView.vue'),
+    },
+    {
+      path: '/posts/:postId/edit',
+      name: 'post-edit',
+      component: () => import('@/views/PostEditView.vue'),
+      props: true,
+    },
+    {
+      path: '/posts/:postId',
+      name: 'post-detail',
+      component: () => import('@/views/PostDetailView.vue'),
+      props: true,
+    },
+    {
+      path: '/map',
+      name: 'map',
+      component: () => import('@/views/MapView.vue'),
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('@/views/NotFoundView.vue'),
+    },
   ],
 })
 

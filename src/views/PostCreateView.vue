@@ -1,5 +1,5 @@
 <template>
   <main class="page">
-    <h1>여행지 지도</h1>
+    <h1>게시글 작성</h1>
   </main>
 </template>
