@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 
 import AppNavigation from '@/components/common/AppNavigation.vue'
+import logo from '@/assets/logo.svg'
 
 const route = useRoute()
 const isMenuOpen = ref(false)
@@ -41,7 +42,8 @@ onBeforeUnmount(() => {
   <header class="app-header">
     <div class="app-header__inner">
       <RouterLink :to="{ name: 'home' }" class="app-header__logo" aria-label="LocalHub 홈으로 이동">
-        LocalHub
+        <img :src="logo" alt="LocalHub 로고" class="app-header__logo-image" />
+        <span class="app-header__logo-text">LocalHub</span>
       </RouterLink>
 
       <div class="app-header__desktop-navigation">
@@ -94,11 +96,25 @@ onBeforeUnmount(() => {
 }
 
 .app-header__logo {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
   color: var(--color-primary);
   font-size: var(--font-size-xl);
   font-weight: var(--font-weight-bold);
   letter-spacing: -0.03em;
   text-decoration: none;
+}
+
+.app-header__logo-image {
+  width: 36px;
+  height: auto;
+}
+
+.app-header__logo-text {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary);
 }
 
 .app-header__desktop-navigation {
