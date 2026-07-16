@@ -12,7 +12,7 @@ const posts = ref([])
 const totalCount = ref(0)
 const errorMessage = ref('')
 
-const searchInput = ref(typeof route.query.keyword === 'string' ? route.query.keyword : '')
+const searchInput = ref(typeof route.query.query === 'string' ? route.query.query : '')
 
 const appliedKeyword = ref(searchInput.value)
 
@@ -55,6 +55,10 @@ function getPostNumber(post, index) {
 }
 
 function getLocationCount(post) {
+  if (Number.isFinite(post.locationCount)) {
+    return post.locationCount
+  }
+
   if (Array.isArray(post.locations)) {
     return post.locations.length
   }
@@ -91,7 +95,9 @@ async function loadPosts() {
 
   try {
     const result = await getPosts({
-      keyword: appliedKeyword.value,
+      query: appliedKeyword.value,
+      category: typeof route.query.category === 'string' ? route.query.category : '',
+      placeId: typeof route.query.placeId === 'string' ? route.query.placeId : '',
       page: currentPage.value,
       size: pageSize,
     })
@@ -113,7 +119,15 @@ async function updateRouteQuery() {
   const query = {}
 
   if (appliedKeyword.value) {
-    query.keyword = appliedKeyword.value
+    query.query = appliedKeyword.value
+  }
+
+  if (typeof route.query.category === 'string' && route.query.category) {
+    query.category = route.query.category
+  }
+
+  if (typeof route.query.placeId === 'string' && route.query.placeId) {
+    query.placeId = route.query.placeId
   }
 
   if (currentPage.value > 1) {

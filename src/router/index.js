@@ -20,6 +20,10 @@ const router = createRouter({
       component: () => import('@/views/PostCreateView.vue'),
     },
     {
+      path: '/posts/new',
+      redirect: (to) => ({ name: 'post-create', query: to.query }),
+    },
+    {
       path: '/posts/:postId/edit',
       name: 'post-edit',
       component: () => import('@/views/PostEditView.vue'),

@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import CourseKakaoMap from '@/components/map/CourseKakaoMap.vue'
-import { mockPost } from '@/data/locationData'
+import { deletePost as deletePostRequest, getPost } from '@/services/posts'
 
 const route = useRoute()
 const router = useRouter()
@@ -24,18 +24,11 @@ const formattedCreatedAt = computed(() => {
 async function fetchPost() {
   isLoading.value = true
   try {
-    /*
-    const response = await fetch(`/api/posts/${route.params.postId}`)
-    if (!response.ok) throw new Error('게시글을 불러오지 못했습니다.')
-    post.value = await response.json()
-    */
-    console.log('조회 게시글 ID:', route.params.postId)
-    post.value = { ...mockPost, locations: mockPost.locations.map((item) => ({ ...item })) }
+    post.value = await getPost(route.params.postId)
     selectedPlaceId.value = post.value.locations[0]?.contentId ?? null
   } catch (error) {
-    console.error(error)
-    window.alert('게시글을 불러오는 중 오류가 발생했습니다.')
-    router.replace('/posts')
+    window.alert(error instanceof Error ? error.message : '게시글을 불러오는 중 오류가 발생했습니다.')
+    await router.replace('/posts')
   } finally {
     isLoading.value = false
   }
@@ -65,13 +58,11 @@ async function deletePost() {
   isDeleting.value = true
   deleteErrorMessage.value = ''
   try {
-    /* 실제 DELETE API 호출 위치 */
-    if (deletePassword.value !== '1234') {
-      deleteErrorMessage.value = '비밀번호가 일치하지 않습니다.'
-      return
-    }
+    await deletePostRequest(route.params.postId, deletePassword.value)
     window.alert('게시글이 삭제되었습니다.')
-    router.push('/posts')
+    await router.push('/posts')
+  } catch (error) {
+    deleteErrorMessage.value = error instanceof Error ? error.message : '게시글을 삭제하지 못했습니다.'
   } finally {
     isDeleting.value = false
   }

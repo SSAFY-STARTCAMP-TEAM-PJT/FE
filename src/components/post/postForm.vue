@@ -1,38 +1,40 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import CourseKakaoMap from '@/components/map/CourseKakaoMap.vue'
+import { getLocations } from '@/services/locationService'
 
 const props = defineProps({
   mode: { type: String, default: 'create', validator: (value) => ['create', 'edit'].includes(value) },
   initialPost: { type: Object, default: () => ({}) },
-  locations: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
 })
 const emit = defineEmits(['submit', 'cancel'])
 
 const form = reactive({ category: 'COURSE', title: '', content: '', password: '' })
 const keyword = ref('')
-const locationCategory = ref('ALL')
+const locationCategory = ref('전체')
 const selectedLocations = ref([])
+const availableLocations = ref([])
+const locationsLoading = ref(false)
+const locationsError = ref('')
+
+let searchTimer = null
+let searchAbortController = null
 
 const categories = [
-  { value: 'ALL', label: '전체' },
-  { value: 'ATTRACTION', label: '관광지' },
-  { value: 'RESTAURANT', label: '맛집' },
-  { value: 'CULTURE', label: '문화시설' },
-  { value: 'ACCOMMODATION', label: '숙박' },
-  { value: 'SHOPPING', label: '쇼핑' },
+  '전체',
+  '관광지',
+  '문화시설',
+  '축제공연행사',
+  '여행코스',
+  '레포츠',
+  '숙박',
+  '쇼핑',
+  '음식점',
 ]
 const isEdit = computed(() => props.mode === 'edit')
 const pageTitle = computed(() => (isEdit.value ? '여행 코스 수정하기' : '여행 코스 공유하기'))
-const filteredLocations = computed(() => {
-  const term = keyword.value.trim().toLocaleLowerCase('ko-KR')
-  return props.locations.filter((location) => {
-    const categoryMatched = locationCategory.value === 'ALL' || location.category === locationCategory.value
-    const text = `${location.name ?? ''} ${location.address ?? ''}`.toLocaleLowerCase('ko-KR')
-    return categoryMatched && (!term || text.includes(term))
-  })
-})
+const filteredLocations = computed(() => availableLocations.value)
 
 watch(() => props.initialPost, (post) => {
   form.category = post?.category ?? 'COURSE'
@@ -41,6 +43,37 @@ watch(() => props.initialPost, (post) => {
   form.password = ''
   selectedLocations.value = Array.isArray(post?.locations) ? post.locations.map((item) => ({ ...item })) : []
 }, { immediate: true, deep: true })
+
+watch([keyword, locationCategory], () => {
+  window.clearTimeout(searchTimer)
+  searchTimer = window.setTimeout(loadLocations, 300)
+}, { immediate: true })
+
+async function loadLocations() {
+  searchAbortController?.abort()
+  const controller = new AbortController()
+  searchAbortController = controller
+  locationsLoading.value = true
+  locationsError.value = ''
+
+  try {
+    availableLocations.value = await getLocations({
+      query: keyword.value.trim(),
+      category: locationCategory.value === '전체' ? '' : locationCategory.value,
+      limit: 100,
+      signal: controller.signal,
+    })
+  } catch (error) {
+    if (error?.name !== 'AbortError') {
+      availableLocations.value = []
+      locationsError.value = error instanceof Error ? error.message : '여행지를 검색하지 못했습니다.'
+    }
+  } finally {
+    if (searchAbortController === controller) {
+      locationsLoading.value = false
+    }
+  }
+}
 
 function isSelected(id) { return selectedLocations.value.some((item) => String(item.contentId) === String(id)) }
 function addLocation(location) { if (!isSelected(location.contentId)) selectedLocations.value.push({ ...location }) }
@@ -65,10 +98,17 @@ function submit() {
     title: form.title.trim(),
     content: form.content.trim(),
     password: form.password,
-    locationIds: selectedLocations.value.map((item) => item.contentId),
-    locations: selectedLocations.value.map((item, index) => ({ ...item, sortOrder: index + 1 })),
+    locations: selectedLocations.value.map((item, index) => ({
+      ...item,
+      visitOrder: index + 1,
+    })),
   })
 }
+
+onBeforeUnmount(() => {
+  window.clearTimeout(searchTimer)
+  searchAbortController?.abort()
+})
 </script>
 
 <template>
@@ -111,13 +151,15 @@ function submit() {
             <div class="search-area">
               <input v-model="keyword" class="control" type="search" placeholder="여행지 이름 또는 주소 검색" />
               <div class="chips">
-                <button v-for="category in categories" :key="category.value" type="button" :class="['chip', { active: locationCategory === category.value }]" @click="locationCategory = category.value">{{ category.label }}</button>
+                <button v-for="category in categories" :key="category" type="button" :class="['chip', { active: locationCategory === category }]" @click="locationCategory = category">{{ category }}</button>
               </div>
             </div>
 
             <div class="location-layout">
               <section>
                 <h3>검색 결과 <small>{{ filteredLocations.length }}개</small></h3>
+                <p v-if="locationsLoading" class="location-state">여행지를 검색하고 있습니다.</p>
+                <p v-else-if="locationsError" class="location-state location-state--error">{{ locationsError }}</p>
                 <ul class="result-list">
                   <li v-for="location in filteredLocations" :key="location.contentId">
                     <div><strong>{{ location.name }}</strong><span>{{ location.categoryLabel }} · {{ location.address }}</span></div>
@@ -152,5 +194,15 @@ function submit() {
 </template>
 
 <style scoped>
+.location-state {
+  margin: 0 0 var(--spacing-3);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.location-state--error {
+  color: var(--color-error);
+}
+
 .post-form-view{min-height:calc(100vh - var(--header-height));padding:var(--spacing-8) 0 var(--spacing-16)}.page-header{margin-bottom:var(--spacing-6)}.page-header h1{margin:0;font-size:var(--font-size-3xl)}.page-header p{color:var(--color-text-secondary)}.eyebrow{margin:0!important;color:var(--color-primary)!important;font-size:var(--font-size-xs);font-weight:700;letter-spacing:.12em}.post-form{overflow:hidden;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-lg);box-shadow:var(--shadow-card)}.panel+.panel{border-top:1px solid var(--color-border)}.panel__header{padding:var(--spacing-5);background:var(--color-surface-muted);border-bottom:1px solid var(--color-border-light)}.panel__header h2,.panel__header p{margin:0}.panel__header p{color:var(--color-text-secondary);font-size:var(--font-size-sm)}.panel__header--between{display:flex;justify-content:space-between;gap:var(--spacing-4)}.panel__content{display:grid;gap:var(--spacing-6);padding:var(--spacing-5)}.field{display:grid;gap:var(--spacing-2);font-size:var(--font-size-sm);font-weight:600}.field span{color:var(--color-error)}.field small{justify-self:end;color:var(--color-text-muted);font-weight:400}.control{min-height:46px;padding:0 var(--spacing-3);color:var(--color-text-primary);font:inherit;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md)}.control:focus{border-color:var(--color-primary);outline:none;box-shadow:0 0 0 3px rgb(47 125 91 / 12%)}.textarea{min-height:220px;padding-block:var(--spacing-3);resize:vertical}.search-area{display:grid;gap:var(--spacing-3)}.chips{display:flex;flex-wrap:wrap;gap:var(--spacing-2)}.chip{padding:8px 14px;border:1px solid var(--color-border);border-radius:var(--radius-full);background:white;cursor:pointer}.chip.active{color:white;background:var(--color-primary);border-color:var(--color-primary)}.location-layout{display:grid;grid-template-columns:1fr 1fr;gap:var(--spacing-5)}.location-layout h3,.preview h3{margin:0 0 var(--spacing-3)}.result-list,.selected-list{display:grid;gap:var(--spacing-2);margin:0;padding:0;list-style:none;max-height:360px;overflow:auto}.result-list li,.selected-list li{display:flex;align-items:center;gap:var(--spacing-3);padding:var(--spacing-3);border:1px solid var(--color-border-light);border-radius:var(--radius-md)}.result-list li>div,.selected-list li>div:not(.row-actions){display:grid;min-width:0;flex:1}.result-list span,.selected-list span{overflow:hidden;color:var(--color-text-secondary);font-size:var(--font-size-xs);white-space:nowrap;text-overflow:ellipsis}.result-list button,.row-actions button{min-width:36px;height:34px;border:1px solid var(--color-border);border-radius:var(--radius-sm);background:white;cursor:pointer}.selected-list b{display:grid;place-items:center;width:30px;height:30px;color:white;background:var(--color-primary);border-radius:50%}.row-actions{display:flex;gap:4px}.preview{display:grid;gap:var(--spacing-3)}.empty{display:grid;place-items:center;min-height:240px;color:var(--color-text-muted);background:var(--color-surface-muted);border:1px dashed var(--color-border-strong);border-radius:var(--radius-md)}.actions{display:flex;justify-content:flex-end;gap:var(--spacing-3);padding:var(--spacing-5);border-top:1px solid var(--color-border)}.actions button{min-width:120px;height:46px;border-radius:var(--radius-md);font-weight:600;cursor:pointer}.primary{color:white;background:var(--color-primary);border:1px solid var(--color-primary)}.secondary{color:var(--color-text-secondary);background:white;border:1px solid var(--color-border)}@media(max-width:800px){.location-layout{grid-template-columns:1fr}.actions button{flex:1}}
 </style>

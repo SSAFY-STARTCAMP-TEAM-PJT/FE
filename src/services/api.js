@@ -42,7 +42,17 @@ function getErrorMessage(data, status) {
     return data
   }
 
-  if (data?.detail) {
+  if (Array.isArray(data?.detail)) {
+    return data.detail
+      .map((item) => {
+        const location = Array.isArray(item?.loc) ? item.loc.slice(1).join('.') : ''
+        return [location, item?.msg].filter(Boolean).join(': ')
+      })
+      .filter(Boolean)
+      .join('\n')
+  }
+
+  if (typeof data?.detail === 'string' && data.detail.trim()) {
     return data.detail
   }
 
@@ -52,6 +62,14 @@ function getErrorMessage(data, status) {
 
   if (status === 404) {
     return '요청한 정보를 찾을 수 없습니다.'
+  }
+
+  if (status === 403) {
+    return '비밀번호가 일치하지 않거나 요청 권한이 없습니다.'
+  }
+
+  if (status === 422) {
+    return '입력한 내용을 확인해 주세요.'
   }
 
   if (status >= 500) {
