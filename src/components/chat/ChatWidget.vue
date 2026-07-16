@@ -19,7 +19,6 @@ const input = ref('')
 const isSending = ref(false)
 const errorMessage = ref('')
 const lastFailedMessage = ref('')
-const conversationId = ref(null)
 
 const inputElement = ref(null)
 const messageListElement = ref(null)
@@ -60,9 +59,7 @@ async function requestAssistantMessage(message) {
   errorMessage.value = ''
 
   try {
-    const result = await sendChatMessage(message, conversationId.value)
-
-    conversationId.value = result.conversationId
+    const result = await sendChatMessage(message)
 
     messages.value.push(createMessage('assistant', result.reply))
 
