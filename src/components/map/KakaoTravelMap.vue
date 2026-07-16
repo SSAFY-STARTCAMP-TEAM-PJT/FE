@@ -94,7 +94,7 @@ function createMap() {
 
   map = new kakao.maps.Map(mapContainer.value, {
     center: new kakao.maps.LatLng(DEFAULT_CENTER.latitude, DEFAULT_CENTER.longitude),
-    level: 6,
+    level: 4,
   })
 
   map.setMaxLevel(12)
@@ -336,7 +336,7 @@ function fitLocations(locations) {
 
   if (validLocations.length === 1) {
     moveToLocation(validLocations[0], {
-      level: 4,
+      level: 3,
     })
     return
   }
@@ -390,7 +390,7 @@ watch(
     }
 
     moveToLocation(location, {
-      level: 4,
+      level: 3,
     })
   },
 )
@@ -402,7 +402,7 @@ onMounted(async () => {
     renderMarkers()
 
     if (props.focusLocation) {
-      moveToLocation(props.focusLocation, { immediate: true, level: 4 })
+      moveToLocation(props.focusLocation, { immediate: true, level: 3 })
     }
   } catch (error) {
     mapError.value = error instanceof Error ? error.message : '지도를 불러오지 못했습니다.'

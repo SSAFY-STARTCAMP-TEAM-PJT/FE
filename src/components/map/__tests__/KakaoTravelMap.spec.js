@@ -105,7 +105,7 @@ describe('KakaoTravelMap', () => {
     })
 
     const map = maps[0]
-    expect(map.setLevel).toHaveBeenCalledWith(4)
+    expect(map.setLevel).toHaveBeenCalledWith(3)
     expect(map.panTo).toHaveBeenCalledWith(
       expect.objectContaining({ latitude: 35.2, longitude: 129.2 }),
     )
