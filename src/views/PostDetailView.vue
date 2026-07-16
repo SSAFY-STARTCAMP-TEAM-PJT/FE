@@ -160,7 +160,15 @@ onMounted(fetchPost)
             </div>
           </header>
           <div class="place-card">
-            <div class="place-icon">⌖</div>
+            <div class="place-icon">
+              <img
+                v-if="selectedPlace.thumbnailImageUrl"
+                class="place-thumbnail"
+                :src="selectedPlace.thumbnailImageUrl"
+                :alt="`${selectedPlace.name} 이미지`"
+              />
+              <template v-else>⌖</template>
+            </div>
             <div>
               <span class="category">{{ selectedPlace.categoryLabel }}</span>
               <h3>{{ selectedPlace.name }}</h3>
@@ -375,11 +383,17 @@ button {
 .place-icon {
   display: grid;
   place-items: center;
+  overflow: hidden;
   min-height: 120px;
   color: var(--color-primary);
   font-size: 40px;
   background: var(--color-primary-light);
   border-radius: var(--radius-md);
+}
+.place-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .place-card h3 {
   margin: var(--spacing-1) 0;

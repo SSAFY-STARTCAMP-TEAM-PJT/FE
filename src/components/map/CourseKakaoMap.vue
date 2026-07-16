@@ -288,7 +288,7 @@ onBeforeUnmount(() => {
 .course-map__canvas { width: 100%; height: 100%; }
 :deep(.course-map__canvas canvas),
 :deep(.course-map__canvas svg) { max-width:none; }
-.course-map__state { position:absolute; inset:0; display:grid; place-items:center; padding:var(--spacing-5); color:var(--color-text-secondary); background:rgb(247 249 248 / 88%); text-align:center; }
+.course-map__state { position:absolute; inset:0; display:grid; place-items:center; padding:var(--spacing-5); color:var(--color-text-secondary); background:rgb(247 249 248 / 88%); text-align:center; pointer-events:none; }
 .course-map__state--error { color:var(--color-error); }
 .course-map__route-state { position:absolute; top:12px; left:50%; z-index:2; max-width:calc(100% - 32px); padding:8px 12px; color:var(--color-text-primary); font-size:12px; font-weight:600; background:rgb(255 255 255 / 94%); border:1px solid var(--color-border); border-radius:var(--radius-full); box-shadow:var(--shadow-sm); transform:translateX(-50%); }
 .course-map__route-state--success { display:flex; align-items:center; gap:7px; }
