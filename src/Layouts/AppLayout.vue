@@ -21,8 +21,6 @@ const isFullWidthPage = computed(() => {
       <RouterView />
     </main>
 
-    <!-- 추후 전역 AI 위젯 추가 -->
-
     <ChatWidget />
     <AppLoading />
   </div>
