@@ -16,6 +16,6 @@ describe('App', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('StartCamp Map App')
+    expect(wrapper.text()).toContain('LocalHub')
   })
 })
