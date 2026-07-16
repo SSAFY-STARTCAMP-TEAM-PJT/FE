@@ -1,206 +1,306 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import KakaoTravelMap from '@/components/map/KakaoTravelMap.vue'
 import MapFilterBar from '@/components/map/MapFilterBar.vue'
 import MapSidePanel from '@/components/map/MapSidePanel.vue'
-import { getLocations, getRelatedPosts } from '@/services/locationService'
-import { findNearbyLocations } from '@/utils/geo'
+import {
+  containsLocationBounds,
+  expandLocationBounds,
+  filterLocationsByBounds,
+  getCachedMapLocations,
+  setCachedMapLocations,
+} from '@/services/locationMapCache'
+import { getLocation, getLocations, getNearbyLocations } from '@/services/locationService'
+import { getPosts } from '@/services/posts'
 
+const LOCATION_LIMIT = 500
+const LOCATION_REQUEST_DELAY = 300
+
+const route = useRoute()
 const router = useRouter()
-
 const mapComponent = ref(null)
 
 const allLocations = ref([])
-const visibleLocationIds = ref([])
-
-const searchKeyword = ref('')
-const selectedCategory = ref('전체')
+const searchKeyword = ref(typeof route.query.query === 'string' ? route.query.query : '')
+const selectedCategory = ref(
+  typeof route.query.category === 'string' ? route.query.category : '전체',
+)
 const selectedLocation = ref(null)
 const focusLocation = ref(null)
-
+const viewportBounds = ref(null)
 const relatedPosts = ref([])
-
+const nearbyLocations = ref([])
 const locationsLoading = ref(false)
+const hasLoadedLocations = ref(false)
 const postsLoading = ref(false)
 const pageError = ref('')
+const isLocationLimitReached = ref(false)
 
-let relatedPostsRequestId = 0
+let locationRequestTimer = null
+let activeLocationRequest = null
+let locationContextRequestId = 0
 
-const normalizedSearchKeyword = computed(() =>
-  searchKeyword.value.trim().toLocaleLowerCase('ko-KR'),
+const visibleLocations = computed(() => allLocations.value)
+const hasActiveFilter = computed(
+  () => searchKeyword.value.length > 0 || selectedCategory.value !== '전체',
 )
-
-const searchAndCategoryFilteredLocations = computed(() => {
-  return allLocations.value.filter((location) => {
-    const matchesCategory =
-      selectedCategory.value === '전체' || location.category === selectedCategory.value
-
-    if (!matchesCategory) {
-      return false
-    }
-
-    if (!normalizedSearchKeyword.value) {
-      return true
-    }
-
-    const searchableText = [location.name, location.address, location.region]
-      .filter(Boolean)
-      .join(' ')
-      .toLocaleLowerCase('ko-KR')
-
-    return searchableText.includes(normalizedSearchKeyword.value)
-  })
-})
-
-const visibleLocations = computed(() => {
-  const visibleIdSet = new Set(visibleLocationIds.value.map(String))
-
-  return searchAndCategoryFilteredLocations.value.filter((location) =>
-    visibleIdSet.has(String(location.id)),
-  )
-})
-
-const nearbyLocations = computed(() => {
-  return findNearbyLocations(selectedLocation.value, allLocations.value, 5)
-})
-
-const hasActiveFilter = computed(() => {
-  return searchKeyword.value.length > 0 || selectedCategory.value !== '전체'
-})
-
 const selectedLocationId = computed(() => selectedLocation.value?.id ?? null)
+const initialLocationsLoading = computed(() => locationsLoading.value && !hasLoadedLocations.value)
+const locationsRefreshing = computed(() => locationsLoading.value && hasLoadedLocations.value)
 
-onMounted(() => {
-  loadLocations()
-})
+function getLocationFilters() {
+  return {
+    category: selectedCategory.value === '전체' ? '' : selectedCategory.value,
+    query: searchKeyword.value.trim(),
+  }
+}
 
-watch(searchAndCategoryFilteredLocations, async (filteredLocations) => {
-  if (
-    selectedLocation.value &&
-    !filteredLocations.some((location) => String(location.id) === String(selectedLocation.value.id))
-  ) {
-    closeDetail()
+function getRouteQuery(overrides = {}) {
+  const query = {
+    query: searchKeyword.value || undefined,
+    category: selectedCategory.value !== '전체' ? selectedCategory.value : undefined,
+    placeId: route.query.placeId || undefined,
+    ...overrides,
   }
 
-  if (filteredLocations.length === 1) {
-    focusLocation.value = {
-      ...filteredLocations[0],
-    }
+  return Object.fromEntries(Object.entries(query).filter(([, value]) => value !== undefined))
+}
+
+async function replaceRouteQuery(overrides = {}) {
+  await router.replace({ path: '/map', query: getRouteQuery(overrides) })
+}
+
+function handleMapReady(bounds) {
+  if (bounds) {
+    viewportBounds.value = bounds
+    scheduleLocationLoad()
   }
-})
+}
+
+function handleViewportChange(bounds) {
+  viewportBounds.value = bounds
+
+  if (searchKeyword.value.trim()) return
+
+  scheduleLocationLoad()
+}
+
+function scheduleLocationLoad() {
+  if (!viewportBounds.value) return
+
+  window.clearTimeout(locationRequestTimer)
+  locationRequestTimer = window.setTimeout(loadLocations, LOCATION_REQUEST_DELAY)
+}
 
 async function loadLocations() {
+  if (!viewportBounds.value) return
+
+  const requestedViewport = { ...viewportBounds.value }
+  const { category, query } = getLocationFilters()
+  const cachedResult = getCachedMapLocations({
+    category,
+    query,
+    bounds: requestedViewport,
+  })
+
+  if (cachedResult) {
+    activeLocationRequest?.controller.abort()
+    activeLocationRequest = null
+    locationsLoading.value = false
+    pageError.value = ''
+    applyLocations(cachedResult.locations, {
+      limitReached: cachedResult.limitReached,
+      query,
+    })
+    return
+  }
+
+  const requestBounds = query ? null : expandLocationBounds(requestedViewport)
+
+  if (
+    activeLocationRequest &&
+    activeLocationRequest.category === category &&
+    activeLocationRequest.query === query &&
+    (query || containsLocationBounds(activeLocationRequest.requestBounds, requestedViewport))
+  ) {
+    return
+  }
+
+  activeLocationRequest?.controller.abort()
+  const controller = new AbortController()
+  const request = {
+    category,
+    query,
+    requestBounds,
+    requestedViewport,
+    controller,
+  }
+  activeLocationRequest = request
   locationsLoading.value = true
   pageError.value = ''
 
   try {
-    const locations = await getLocations()
+    const locations = await getLocations({
+      category,
+      query,
+      bounds: requestBounds,
+      limit: LOCATION_LIMIT,
+      signal: controller.signal,
+      showLoading: false,
+    })
 
-    allLocations.value = locations.filter(
+    const validLocations = locations.filter(
       (location) => Number.isFinite(location.latitude) && Number.isFinite(location.longitude),
     )
+    const limitReached = locations.length === LOCATION_LIMIT
+    const cacheBounds = limitReached ? requestedViewport : requestBounds
 
-    visibleLocationIds.value = allLocations.value.map((location) => String(location.id))
+    setCachedMapLocations({
+      category,
+      query,
+      bounds: cacheBounds,
+      locations: validLocations,
+      limitReached,
+    })
+
+    if (activeLocationRequest === request) {
+      const locationsForCurrentViewport = query
+        ? validLocations
+        : filterLocationsByBounds(validLocations, viewportBounds.value)
+
+      applyLocations(locationsForCurrentViewport, { limitReached, query })
+    }
   } catch (error) {
-    pageError.value = error instanceof Error ? error.message : '여행지 정보를 불러오지 못했습니다.'
+    if (error?.name !== 'AbortError' && activeLocationRequest === request) {
+      pageError.value =
+        error instanceof Error ? error.message : '여행지 정보를 불러오지 못했습니다.'
+    }
   } finally {
-    locationsLoading.value = false
+    if (activeLocationRequest === request) {
+      activeLocationRequest = null
+      locationsLoading.value = false
+    }
   }
 }
 
-function handleSearch(keyword) {
+function applyLocations(locations, { limitReached, query }) {
+  const nextLocations = [...locations]
+
+  if (
+    selectedLocation.value &&
+    !nextLocations.some((location) => String(location.id) === String(selectedLocation.value.id))
+  ) {
+    nextLocations.push(selectedLocation.value)
+  }
+
+  allLocations.value = nextLocations
+  isLocationLimitReached.value = limitReached
+  hasLoadedLocations.value = true
+
+  if (query && nextLocations.length === 1) {
+    focusLocation.value = { ...nextLocations[0] }
+  }
+}
+
+function retryLocations() {
+  loadLocations()
+}
+
+async function handleSearch(keyword) {
   searchKeyword.value = keyword
-
-  const searchResults = searchAndCategoryFilteredLocations.value
-
-  if (searchResults.length === 1) {
-    focusLocation.value = {
-      ...searchResults[0],
-    }
-  }
+  await replaceRouteQuery({ query: keyword || undefined })
+  scheduleLocationLoad()
 }
 
-function handleCategoryChange(category) {
+async function handleCategoryChange(category) {
   selectedCategory.value = category
-
-  const filteredLocations = searchAndCategoryFilteredLocations.value
-
-  if (filteredLocations.length === 1) {
-    focusLocation.value = {
-      ...filteredLocations[0],
-    }
-  }
+  await replaceRouteQuery({ category: category === '전체' ? undefined : category })
+  scheduleLocationLoad()
 }
 
-function resetFilters() {
+async function resetFilters() {
   searchKeyword.value = ''
   selectedCategory.value = '전체'
-  closeDetail()
-
-  requestAnimationFrame(() => {
-    mapComponent.value?.fitLocations(allLocations.value)
-  })
+  selectedLocation.value = null
+  relatedPosts.value = []
+  nearbyLocations.value = []
+  await router.replace({ path: '/map' })
+  scheduleLocationLoad()
 }
 
-function handleBoundsChange(locationIds) {
-  visibleLocationIds.value = locationIds
+async function loadLocationContext(location) {
+  const requestId = ++locationContextRequestId
+  postsLoading.value = true
+  relatedPosts.value = []
+  nearbyLocations.value = []
+
+  try {
+    const [postsResult, nearbyResult] = await Promise.all([
+      getPosts({ placeId: location.contentId, page: 1, size: 3 }),
+      getNearbyLocations(location.contentId, { limit: 5 }),
+    ])
+
+    if (requestId !== locationContextRequestId) return
+
+    relatedPosts.value = postsResult.items
+    nearbyLocations.value = nearbyResult
+  } catch (error) {
+    if (requestId === locationContextRequestId) {
+      console.error('여행지 관련 정보 조회 실패:', error)
+    }
+  } finally {
+    if (requestId === locationContextRequestId) {
+      postsLoading.value = false
+    }
+  }
 }
 
 async function selectLocation(location) {
   selectedLocation.value = location
-  focusLocation.value = {
-    ...location,
-  }
+  focusLocation.value = { ...location }
+  await loadLocationContext(location)
 
-  await loadRelatedPosts(location)
+  if (String(route.query.placeId ?? '') !== String(location.contentId)) {
+    await replaceRouteQuery({ placeId: location.contentId })
+  }
 }
 
 async function selectNearbyLocation(location) {
   await selectLocation(location)
 }
 
-function closeDetail() {
+async function closeDetail() {
+  locationContextRequestId += 1
   selectedLocation.value = null
   relatedPosts.value = []
+  nearbyLocations.value = []
+  await replaceRouteQuery({ placeId: undefined })
 }
 
-async function loadRelatedPosts(location) {
-  const requestId = ++relatedPostsRequestId
-
-  postsLoading.value = true
-  relatedPosts.value = []
+async function loadRouteLocation(placeId) {
+  if (!placeId) return
+  if (String(selectedLocation.value?.contentId ?? '') === String(placeId)) return
 
   try {
-    const posts = await getRelatedPosts(location.contentId ?? location.id)
+    const location = await getLocation(placeId)
+    selectedLocation.value = location
+    focusLocation.value = { ...location }
 
-    if (requestId !== relatedPostsRequestId) {
-      return
+    if (!allLocations.value.some((item) => item.id === location.id)) {
+      allLocations.value = [...allLocations.value, location]
     }
 
-    relatedPosts.value = posts.slice(0, 3)
+    await loadLocationContext(location)
   } catch (error) {
-    if (requestId !== relatedPostsRequestId) {
-      return
-    }
-
-    relatedPosts.value = []
-    console.error('관련 게시글 조회 실패:', error)
-  } finally {
-    if (requestId === relatedPostsRequestId) {
-      postsLoading.value = false
-    }
+    pageError.value =
+      error instanceof Error ? error.message : '선택한 여행지를 불러오지 못했습니다.'
   }
 }
 
 function createCourse(location) {
-  router.push({
-    path: '/posts/new',
-    query: {
-      locationId: location.contentId ?? location.id,
-    },
-  })
+  router.push({ path: '/posts/create', query: { placeId: location.contentId } })
 }
 
 function openPost(post) {
@@ -208,14 +308,28 @@ function openPost(post) {
 }
 
 function openAllPosts(location) {
-  router.push({
-    path: '/posts',
-    query: {
-      locationId: location.contentId ?? location.id,
-      locationName: location.name,
-    },
-  })
+  router.push({ path: '/posts', query: { placeId: location.contentId } })
 }
+
+watch(
+  () => [route.query.query, route.query.category],
+  ([query, category]) => {
+    searchKeyword.value = typeof query === 'string' ? query : ''
+    selectedCategory.value = typeof category === 'string' ? category : '전체'
+  },
+)
+
+watch(
+  () => route.query.placeId,
+  (placeId) => loadRouteLocation(typeof placeId === 'string' ? placeId : ''),
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  window.clearTimeout(locationRequestTimer)
+  activeLocationRequest?.controller.abort()
+  locationContextRequestId += 1
+})
 </script>
 
 <template>
@@ -236,11 +350,15 @@ function openAllPosts(location) {
       <MapFilterBar
         :search-keyword="searchKeyword"
         :selected-category="selectedCategory"
-        :loading="locationsLoading"
+        :loading="initialLocationsLoading"
         @search="handleSearch"
         @update:selected-category="handleCategoryChange"
         @reset="resetFilters"
       />
+
+      <p v-if="isLocationLimitReached" class="map-view__limit-notice" role="status">
+        이 영역에는 여행지가 많습니다. 지도를 확대하면 더 정확한 결과를 볼 수 있습니다.
+      </p>
 
       <div v-if="pageError" class="map-view__error" role="alert">
         <div>
@@ -248,17 +366,18 @@ function openAllPosts(location) {
           <p>{{ pageError }}</p>
         </div>
 
-        <button type="button" @click="loadLocations">다시 시도</button>
+        <button type="button" @click="retryLocations">다시 시도</button>
       </div>
 
-      <section v-else class="map-view__workspace">
+      <section class="map-view__workspace">
         <KakaoTravelMap
           ref="mapComponent"
-          :locations="searchAndCategoryFilteredLocations"
+          :locations="allLocations"
           :selected-location-id="selectedLocationId"
           :focus-location="focusLocation"
           @select-location="selectLocation"
-          @bounds-change="handleBoundsChange"
+          @map-ready="handleMapReady"
+          @viewport-change="handleViewportChange"
         />
 
         <MapSidePanel
@@ -266,7 +385,8 @@ function openAllPosts(location) {
           :visible-locations="visibleLocations"
           :related-posts="relatedPosts"
           :nearby-locations="nearbyLocations"
-          :locations-loading="locationsLoading"
+          :locations-loading="initialLocationsLoading"
+          :locations-refreshing="locationsRefreshing"
           :posts-loading="postsLoading"
           :has-active-filter="hasActiveFilter"
           @select-location="selectLocation"
@@ -322,7 +442,8 @@ function openAllPosts(location) {
 .map-view__workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
-  min-height: 620px;
+  grid-template-rows: minmax(0, 1fr);
+  height: clamp(620px, 70dvh, 720px);
   overflow: hidden;
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -339,6 +460,16 @@ function openAllPosts(location) {
   color: var(--color-error);
   background-color: rgb(220 90 90 / 8%);
   border: 1px solid rgb(220 90 90 / 20%);
+  border-radius: var(--radius-md);
+}
+
+.map-view__limit-notice {
+  margin: 0;
+  padding: var(--spacing-3) var(--spacing-4);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  background-color: var(--color-secondary-light);
+  border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
 }
 
@@ -374,6 +505,8 @@ function openAllPosts(location) {
 
   .map-view__workspace {
     grid-template-columns: 1fr;
+    grid-template-rows: 460px 420px;
+    height: 880px;
   }
 }
 
@@ -404,6 +537,11 @@ function openAllPosts(location) {
     border-right: 0;
     border-left: 0;
     border-radius: 0;
+  }
+
+  .map-view__workspace {
+    grid-template-rows: 390px 420px;
+    height: 810px;
   }
 
   :deep(.map-filter) {

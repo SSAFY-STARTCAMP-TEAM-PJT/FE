@@ -23,6 +23,10 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  locationsRefreshing: {
+    type: Boolean,
+    default: false,
+  },
   postsLoading: {
     type: Boolean,
     default: false,
@@ -65,6 +69,7 @@ const emit = defineEmits([
         key="list"
         :locations="visibleLocations"
         :loading="locationsLoading"
+        :refreshing="locationsRefreshing"
         :has-active-filter="hasActiveFilter"
         @select-location="emit('select-location', $event)"
       />
@@ -76,7 +81,7 @@ const emit = defineEmits([
 .map-side-panel {
   min-width: 0;
   height: 100%;
-  min-height: 620px;
+  min-height: 0;
   overflow: hidden;
   background-color: var(--color-surface);
   border-left: 1px solid var(--color-border);
@@ -101,7 +106,6 @@ const emit = defineEmits([
 
 @media (max-width: 900px) {
   .map-side-panel {
-    min-height: 420px;
     border-top: 1px solid var(--color-border);
     border-left: 0;
   }

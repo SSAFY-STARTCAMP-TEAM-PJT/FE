@@ -12,6 +12,10 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  refreshing: {
+    type: Boolean,
+    default: false,
+  },
   hasActiveFilter: {
     type: Boolean,
     default: false,
@@ -24,9 +28,16 @@ const emit = defineEmits(['select-location'])
 <template>
   <section class="location-list-panel">
     <header class="location-list-panel__header">
-      <p class="location-list-panel__eyebrow">현재 지도에 보이는 여행지</p>
+      <div>
+        <p class="location-list-panel__eyebrow">현재 지도에 보이는 여행지</p>
 
-      <h2 class="location-list-panel__count">총 {{ locations.length }}개</h2>
+        <h2 class="location-list-panel__count">총 {{ locations.length }}개</h2>
+      </div>
+
+      <p v-if="refreshing" class="location-list-panel__refreshing" role="status">
+        <span class="location-list-panel__refresh-spinner" aria-hidden="true" />
+        이 영역 업데이트 중
+      </p>
     </header>
 
     <div v-if="loading" class="location-list-panel__state">여행지를 불러오는 중입니다.</div>
@@ -85,6 +96,10 @@ const emit = defineEmits(['select-location'])
 }
 
 .location-list-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-3);
   flex: 0 0 auto;
   padding: var(--spacing-6);
   border-bottom: 1px solid var(--color-border-light);
@@ -100,6 +115,25 @@ const emit = defineEmits(['select-location'])
   margin: 0;
   color: var(--color-text-primary);
   font-size: var(--font-size-xl);
+}
+
+.location-list-panel__refreshing {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  flex: 0 0 auto;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.location-list-panel__refresh-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: location-refresh-spin 700ms linear infinite;
 }
 
 .location-list-panel__list {
@@ -203,5 +237,11 @@ const emit = defineEmits(['select-location'])
   max-width: 280px;
   margin: 0;
   font-size: var(--font-size-sm);
+}
+
+@keyframes location-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

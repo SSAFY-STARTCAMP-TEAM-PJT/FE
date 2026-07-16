@@ -1,13 +1,4 @@
-import { mockLocations, mockRelatedPosts } from '@/data/mockLocations'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
-const USE_MOCK_API = import.meta.env.VITE_USE_MOCK_API !== 'false'
-
-function delay(milliseconds = 200) {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, milliseconds)
-  })
-}
+import { apiRequest } from '@/services/api'
 
 function normalizeLocation(location) {
   return {
@@ -27,9 +18,18 @@ function normalizeLocation(location) {
     ),
     name: location.name ?? location.title ?? '',
     category: location.category ?? location.contentType ?? location.content_type ?? '기타',
+    contentType: location.contentType ?? location.content_type ?? location.category ?? '기타',
+    categoryLabel:
+      location.categoryLabel ??
+      location.category_label ??
+      location.category ??
+      location.contentType ??
+      location.content_type ??
+      '기타',
     address:
       location.address ?? location.addr1 ?? location.roadAddress ?? location.road_address ?? '',
     region: location.region ?? location.areaName ?? location.area_name ?? location.address ?? '',
+    description: location.description ?? '',
     latitude: Number(location.latitude ?? location.lat ?? location.mapY ?? location.map_y),
     longitude: Number(
       location.longitude ?? location.lng ?? location.lon ?? location.mapX ?? location.map_x,
@@ -46,63 +46,63 @@ function normalizeLocation(location) {
       location.firstImage ??
       location.first_image ??
       '',
+    distanceKm: Number(location.distanceKm ?? location.distance_km),
   }
 }
 
-function normalizePost(post) {
-  return {
-    id: String(post.id ?? post.postId ?? post.post_id),
-    title: post.title ?? '',
+function appendOptionalParam(searchParams, key, value) {
+  if (value !== undefined && value !== null && value !== '') {
+    searchParams.set(key, String(value))
   }
 }
 
-async function request(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-    ...options,
+export function normalizeLocationResponse(location) {
+  return normalizeLocation(location)
+}
+
+export async function getLocations({
+  category = '',
+  query = '',
+  bounds = null,
+  skip = 0,
+  limit = 100,
+  signal,
+  showLoading = true,
+} = {}) {
+  const searchParams = new URLSearchParams()
+
+  appendOptionalParam(searchParams, 'category', category)
+  appendOptionalParam(searchParams, 'query', query)
+  appendOptionalParam(searchParams, 'skip', skip)
+  appendOptionalParam(searchParams, 'limit', limit)
+
+  if (bounds) {
+    appendOptionalParam(searchParams, 'min_lat', bounds.minLat)
+    appendOptionalParam(searchParams, 'max_lat', bounds.maxLat)
+    appendOptionalParam(searchParams, 'min_lng', bounds.minLng)
+    appendOptionalParam(searchParams, 'max_lng', bounds.maxLng)
+  }
+
+  const response = await apiRequest(`/api/locations?${searchParams.toString()}`, {
+    signal,
+    showLoading,
   })
 
-  if (!response.ok) {
-    throw new Error(`API 요청에 실패했습니다. (${response.status})`)
-  }
-
-  if (response.status === 204) {
-    return null
-  }
-
-  return response.json()
+  return (Array.isArray(response) ? response : []).map(normalizeLocation)
 }
 
-export async function getLocations() {
-  if (USE_MOCK_API) {
-    await delay()
-    return mockLocations.map(normalizeLocation)
-  }
+export async function getLocation(contentId, { signal } = {}) {
+  const response = await apiRequest(`/api/locations/${encodeURIComponent(contentId)}`, { signal })
 
-  const response = await request('/api/locations')
-
-  const items = Array.isArray(response)
-    ? response
-    : (response.items ?? response.content ?? response.locations ?? response.results ?? [])
-
-  return items.map(normalizeLocation)
+  return normalizeLocation(response)
 }
 
-export async function getRelatedPosts(locationId) {
-  if (USE_MOCK_API) {
-    await delay(120)
+export async function getNearbyLocations(contentId, { limit = 5, signal } = {}) {
+  const searchParams = new URLSearchParams({ limit: String(limit) })
+  const response = await apiRequest(
+    `/api/locations/${encodeURIComponent(contentId)}/nearby?${searchParams.toString()}`,
+    { signal },
+  )
 
-    return (mockRelatedPosts[locationId] ?? []).map(normalizePost)
-  }
-
-  const response = await request(`/api/locations/${encodeURIComponent(locationId)}/posts`)
-
-  const items = Array.isArray(response)
-    ? response
-    : (response.items ?? response.content ?? response.posts ?? response.results ?? [])
-
-  return items.slice(0, 3).map(normalizePost)
+  return (Array.isArray(response) ? response : []).map(normalizeLocation)
 }
