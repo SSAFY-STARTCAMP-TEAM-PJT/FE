@@ -1,46 +1,14 @@
-import { apiRequest } from '@/services/api'
-
-function normalizeList(response) {
-  if (Array.isArray(response)) {
-    return response
-  }
-
-  if (Array.isArray(response?.items)) {
-    return response.items
-  }
-
-  if (Array.isArray(response?.data)) {
-    return response.data
-  }
-
-  if (Array.isArray(response?.results)) {
-    return response.results
-  }
-
-  return []
-}
-
-function getCreatedAt(item) {
-  return item.created_at ?? item.createdAt ?? ''
-}
+import { getLocations } from '@/services/locationService'
+import { getPosts } from '@/services/posts'
 
 export async function getRecentPosts(limit = 3) {
-  const response = await apiRequest('/api/posts')
-  const posts = normalizeList(response)
+  const response = await getPosts({ page: 1, size: limit })
 
-  return posts
-    .sort((a, b) => {
-      const aDate = new Date(getCreatedAt(a)).getTime() || 0
-      const bDate = new Date(getCreatedAt(b)).getTime() || 0
-
-      return bDate - aDate
-    })
-    .slice(0, limit)
+  return response.items
 }
 
 export async function getRecommendedLocations(limit = 3) {
-  const response = await apiRequest('/api/locations')
-  const locations = normalizeList(response)
+  const locations = await getLocations({ limit })
 
-  return locations.slice(0, limit)
+  return locations
 }

@@ -11,7 +11,7 @@ const recommendedLocations = ref([])
 const postsError = ref('')
 const locationsError = ref('')
 
-const selectedRegion = ref('전국')
+const selectedRegion = ref('서울')
 
 const regionDescription = computed(() => {
   if (selectedRegion.value === '전국') {
@@ -47,7 +47,22 @@ function getPostAuthor(post) {
 }
 
 function getLocationImage(location) {
-  return location.thumbnail_image_url ?? location.original_image_url ?? location.image_url ?? ''
+  return (
+    location.thumbnailImageUrl ??
+    location.originalImageUrl ??
+    location.thumbnail_image_url ??
+    location.original_image_url ??
+    location.image_url ??
+    ''
+  )
+}
+
+function getLocationName(location) {
+  return location.name ?? location.title ?? ''
+}
+
+function getLocationType(location) {
+  return location.category ?? location.contentType ?? location.content_type ?? '여행지'
 }
 
 function getLocationAddress(location) {
@@ -109,7 +124,7 @@ onMounted(() => {
               <circle cx="12" cy="10" r="2.5" />
             </svg>
 
-            <span>선택 권역</span>
+            <span>for</span>
             <strong>{{ selectedRegion }}</strong>
           </div>
 
@@ -295,7 +310,7 @@ onMounted(() => {
               <img
                 v-if="getLocationImage(location)"
                 :src="getLocationImage(location)"
-                :alt="`${location.title} 여행지 이미지`"
+                :alt="`${getLocationName(location)} 여행지 이미지`"
               />
 
               <div v-else class="location-image__placeholder" aria-hidden="true">
@@ -306,12 +321,12 @@ onMounted(() => {
               </div>
 
               <span class="location-type">
-                {{ location.content_type ?? '여행지' }}
+                {{ getLocationType(location) }}
               </span>
             </div>
 
             <div class="location-content">
-              <h3>{{ location.title }}</h3>
+              <h3>{{ getLocationName(location) }}</h3>
 
               <p>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
